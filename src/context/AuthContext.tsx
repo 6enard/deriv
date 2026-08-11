@@ -24,7 +24,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const DERIV_API_TOKEN = 'pat_ef28a561dba494c3b0c1ccf33668e3722c178e8d61b36164e596d20864a83dee';
+const DERIV_API_TOKEN = 'pat_82f13659db9f231d89c67606411b4a3edcd0acdc05a608587161d1ed4d2575af';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
