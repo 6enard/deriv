@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { authorize, onConnectionChange, subscribeBalance } from '@/lib/derivApi';
+import { extractOauthToken, cleanOauthParamsFromUrl } from '@/lib/derivOauth';
 import type { AuthorizeResponse } from '@/lib/derivTypes';
 
 interface AuthUser {
@@ -24,14 +25,14 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const DERIV_API_TOKEN = 'pat_82f13659db9f231d89c67606411b4a3edcd0acdc05a608587161d1ed4d2575af';
+const TOKEN_STORAGE_KEY = 'deriv_api_token';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-  const [token, setToken] = useState<string | null>(DERIV_API_TOKEN);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
 
   useEffect(() => {
     const unsub = onConnectionChange((c) => setConnected(c));
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const resp: AuthorizeResponse = await authorize(apiToken);
       if (resp.error) throw new Error(resp.error.message);
       const a = resp.authorize;
+      localStorage.setItem(TOKEN_STORAGE_KEY, apiToken);
       setToken(apiToken);
       setUser({
         loginid: a.loginid,
@@ -57,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Authorization failed';
       setError(msg);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      setToken(null);
       throw err;
     } finally {
       setLoading(false);
@@ -64,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    setToken(null);
     setUser(null);
   }, []);
 
@@ -71,10 +77,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((prev) => (prev ? { ...prev, balance } : prev));
   }, []);
 
-  // Auto-login on mount using the hardcoded token
+  // On mount: check for OAuth token in URL, otherwise try stored token
   useEffect(() => {
-    if (token && !user) {
-      login(token).catch(() => {});
+    const oauthToken = extractOauthToken();
+    if (oauthToken) {
+      cleanOauthParamsFromUrl();
+      login(oauthToken).catch(() => {});
+      return;
+    }
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored) {
+      login(stored).catch(() => {
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
